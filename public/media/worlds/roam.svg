@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1080" role="img" aria-labelledby="t d">
+  <title id="t">Roam placeholder</title><desc id="d">Abstract horizon, path and night-blue distance</desc>
+  <defs><linearGradient id="g" y2="1"><stop stop-color="#182333"/><stop offset=".62" stop-color="#71859c"/><stop offset="1" stop-color="#c4a17f"/></linearGradient></defs>
+  <rect width="900" height="1080" fill="url(#g)"/><circle cx="650" cy="245" r="82" fill="#ede5cf" opacity=".8"/><path d="M0 650L260 495L430 650L610 420L900 690V1080H0Z" fill="#283641" opacity=".85"/><path d="M365 1080Q420 810 520 675" fill="none" stroke="#d9c5a5" stroke-width="64" opacity=".62"/>
+</svg>

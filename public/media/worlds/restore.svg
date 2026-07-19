@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1080" role="img" aria-labelledby="t d">
+  <title id="t">Restore placeholder</title><desc id="d">Abstract water, stone and quiet green forms</desc>
+  <defs><linearGradient id="g" y2="1"><stop stop-color="#213532"/><stop offset="1" stop-color="#8aa499"/></linearGradient></defs>
+  <rect width="900" height="1080" fill="url(#g)"/><ellipse cx="450" cy="810" rx="320" ry="110" fill="#d7ded6" opacity=".6"/><ellipse cx="450" cy="770" rx="215" ry="72" fill="#314944"/><path d="M380 0C260 250 310 360 450 470S590 700 520 1080" fill="none" stroke="#dce8df" stroke-width="38" opacity=".3"/>
+</svg>

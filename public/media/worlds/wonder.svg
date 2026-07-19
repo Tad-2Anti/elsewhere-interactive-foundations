@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1080" role="img" aria-labelledby="t d">
+  <title id="t">Wonder placeholder</title><desc id="d">Abstract violet sky, orbit and small star</desc>
+  <defs><radialGradient id="g"><stop stop-color="#817596"/><stop offset="1" stop-color="#17131e"/></radialGradient></defs>
+  <rect width="900" height="1080" fill="url(#g)"/><ellipse cx="450" cy="550" rx="330" ry="175" fill="none" stroke="#d7cbe7" stroke-width="5" opacity=".58" transform="rotate(-24 450 550)"/><circle cx="450" cy="550" r="145" fill="#b4a0c4" opacity=".46"/><path d="M700 250l15 42 43 15-43 15-15 43-15-43-42-15 42-15Z" fill="#efe4b9"/><circle cx="230" cy="785" r="8" fill="#efe4b9"/>
+</svg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1080" role="img" aria-labelledby="t d">
+  <title id="t">Wear placeholder</title><desc id="d">Abstract folded fabric and metal ring</desc>
+  <defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#34221e"/><stop offset="1" stop-color="#9c7967"/></linearGradient></defs>
+  <rect width="900" height="1080" fill="url(#g)"/><path d="M135 980Q250 610 130 260Q470 420 770 165Q620 570 785 950Q480 780 135 980Z" fill="#d2b7a6" opacity=".8"/><path d="M320 800Q470 495 665 780" fill="none" stroke="#5f3830" stroke-width="40" opacity=".6"/><circle cx="640" cy="325" r="105" fill="none" stroke="#e5c67e" stroke-width="25"/>
+</svg>

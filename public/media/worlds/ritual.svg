@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1080" role="img" aria-labelledby="t d">
+  <title id="t">Ritual placeholder</title><desc id="d">Abstract cup, steam and earthen tones</desc>
+  <defs><linearGradient id="g" x2=".7" y2="1"><stop stop-color="#211714"/><stop offset="1" stop-color="#a96f56"/></linearGradient></defs>
+  <rect width="900" height="1080" fill="url(#g)"/><path d="M260 550H650L600 850Q580 935 455 935T305 850Z" fill="#d3ad87"/><path d="M640 620Q820 610 740 790Q700 855 610 800" fill="none" stroke="#d3ad87" stroke-width="52"/><path d="M360 470Q300 340 420 230M500 470Q580 330 475 185" fill="none" stroke="#e7d4bd" stroke-width="22" opacity=".55"/>
+</svg>
