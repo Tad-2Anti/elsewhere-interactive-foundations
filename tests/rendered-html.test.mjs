@@ -176,11 +176,15 @@ test("sitemap contains canonical worlds only and no fabricated modification date
 });
 
 test("no Web3Forms access key is committed or used as a source fallback", async () => {
-  const route = await src("app/api/requests/route.ts");
+  const experience = await src("app/experience.tsx");
   const environmentExample = await src(".env.example");
   const keyPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-  assert.doesNotMatch(route, keyPattern, "access key committed in request route");
+  assert.doesNotMatch(experience, keyPattern, "access key committed in the client submission code");
   assert.doesNotMatch(environmentExample, keyPattern, "access key committed in environment example");
-  assert.match(route, /WEB3FORMS_ACCESS_KEY\?\.trim/, "environment-only access key lookup missing");
+  assert.match(
+    experience,
+    /NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY/,
+    "client-side, environment-only access key lookup missing"
+  );
 });

@@ -1,14 +1,8 @@
 import { getDb } from "../../../db/index.ts";
 import { sourcingRequests } from "../../../db/schema.ts";
-import { requestSchema, type RequestPayload } from "../../request-schema.ts";
+import { requestSchema } from "../../request-schema.ts";
 
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-type DeliveryResult = {
-  channel: "database" | "web3forms";
-  configured: boolean;
-  succeeded: boolean;
-};
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -35,76 +29,6 @@ function isHoneypotSubmission(body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
   const website = (body as Record<string, unknown>).website;
   return typeof website === "string" && website !== "";
-}
-
-function providerAccepted(body: unknown): boolean {
-  return Boolean(body && typeof body === "object" && (body as { success?: unknown }).success === true);
-}
-
-async function persistRequest(data: RequestPayload): Promise<DeliveryResult> {
-  try {
-    const database = getDb();
-    if (!database) return { channel: "database", configured: false, succeeded: false };
-
-    await database.insert(sourcingRequests).values({
-      name: data.name,
-      email: data.email,
-      phone: data.phone || null,
-      location: data.location,
-      contactPreference: data.contactPreference,
-      category: data.category,
-      request: data.request,
-      reference: data.reference || null,
-      details: data.details || null,
-      status: "pending",
-    });
-    return { channel: "database", configured: true, succeeded: true };
-  } catch (error) {
-    console.error("Request database delivery failed", error);
-    return { channel: "database", configured: true, succeeded: false };
-  }
-}
-
-async function forwardToWeb3Forms(data: RequestPayload): Promise<DeliveryResult> {
-  const accessKey = process.env.WEB3FORMS_ACCESS_KEY?.trim();
-  if (!accessKey) return { channel: "web3forms", configured: false, succeeded: false };
-
-  try {
-    const response = await fetch("https://api.web3forms.com/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        access_key: accessKey,
-        subject: `New ELSEWHERE Sourcing Request: ${data.request}`,
-        from_name: "ELSEWHERE Sourcing Form",
-        ...data,
-      }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    const responseBody: unknown = await response.json().catch(() => null);
-    const succeeded = response.ok && providerAccepted(responseBody);
-    if (!succeeded) console.error("Web3Forms delivery rejected", { status: response.status });
-    return { channel: "web3forms", configured: true, succeeded };
-  } catch (error) {
-    console.error("Web3Forms delivery failed", error);
-    return { channel: "web3forms", configured: true, succeeded: false };
-  }
-}
-
-function deliveryResponse(results: DeliveryResult[]): Response {
-  if (!results.some((result) => result.configured)) {
-    return Response.json(
-      { error: "Submission service is not configured. Please contact us directly." },
-      { status: 503 }
-    );
-  }
-  if (!results.some((result) => result.succeeded)) {
-    return Response.json(
-      { error: "We could not deliver your request. Please try again shortly." },
-      { status: 502 }
-    );
-  }
-  return Response.json({ success: true, message: "Your request has been successfully submitted." });
 }
 
 export async function POST(request: Request) {
@@ -134,6 +58,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const results = await Promise.all([persistRequest(parsed.data), forwardToWeb3Forms(parsed.data)]);
-  return deliveryResponse(results);
+  const database = getDb();
+  if (!database) {
+    return Response.json(
+      { error: "Database service is currently unconfigured. Submissions are unavailable." },
+      { status: 503 }
+    );
+  }
+
+  const data = parsed.data;
+  try {
+    await database.insert(sourcingRequests).values({
+      name: data.name,
+      email: data.email,
+      phone: data.phone || null,
+      location: data.location,
+      contactPreference: data.contactPreference,
+      category: data.category,
+      request: data.request,
+      reference: data.reference || null,
+      details: data.details || null,
+      status: "pending",
+    });
+    return Response.json({ success: true, message: "Your request has been successfully submitted." });
+  } catch (error) {
+    console.error("Request database delivery failed", error);
+    return Response.json(
+      { error: "We could not save your request. Please try again shortly." },
+      { status: 502 }
+    );
+  }
 }

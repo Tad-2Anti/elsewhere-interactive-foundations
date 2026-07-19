@@ -25,7 +25,7 @@ ELSEWHERE is an immersive import-discovery website organized as six atmospheric 
 | `/` | Static | Homepage with Atmospheric Depth Gallery and sourcing request form |
 | `/world/[slug]` | SSG | World page for each of the six canonical worlds |
 | `/world/[alias]` | Redirect | Legacy alias slugs permanently redirect to their canonical world |
-| `/api/requests` | Dynamic | `POST` endpoint — validates, persists to Postgres, forwards to Web3Forms |
+| `/api/requests` | Dynamic | `POST` endpoint — validates and persists to Postgres. The browser separately submits to Web3Forms directly (see below). |
 | `/sitemap.xml` | Static | Dynamically generated sitemap |
 | `/robots.txt` | Static | Search engine crawl rules |
 
@@ -85,7 +85,7 @@ npm run start    # serves the production build on :3000
 1. Import the repository in the Vercel dashboard.
 2. Set **Environment Variables**:
    - `DATABASE_URL` — Neon or Vercel Postgres connection string
-   - `WEB3FORMS_ACCESS_KEY` — your Web3Forms key (default is development-only)
+   - `NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY` — your Web3Forms key. Must be `NEXT_PUBLIC_`-prefixed: Web3Forms rejects server-to-server calls on free plans, so the browser submits to Web3Forms directly.
 3. Deploy — Vercel detects Next.js automatically; no framework preset changes needed.
 
 ## Database

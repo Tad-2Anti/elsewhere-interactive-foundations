@@ -39,6 +39,28 @@ function EntryGate({ onEnter }: { onEnter: (withSound: boolean) => Promise<void>
   );
 }
 
+async function submitToWeb3Forms(data: Record<string, string>): Promise<boolean> {
+  const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
+  if (!accessKey) return false;
+
+  try {
+    const response = await fetch("https://api.web3forms.com/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        access_key: accessKey,
+        subject: `New ELSEWHERE Sourcing Request: ${data.request ?? ""}`,
+        from_name: "ELSEWHERE Sourcing Form",
+        ...data,
+      }),
+    });
+    const result: unknown = await response.json().catch(() => null);
+    return response.ok && Boolean(result && typeof result === "object" && (result as { success?: unknown }).success === true);
+  } catch {
+    return false;
+  }
+}
+
 function CursorAura() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -165,23 +187,20 @@ export default function Experience() {
     setFieldErrors({});
 
     const formData = new FormData(event.currentTarget);
-    const data = Object.fromEntries(formData.entries());
+    const data = Object.fromEntries(formData.entries()) as Record<string, string>;
 
     try {
-      const response = await fetch("/api/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const [dbResponse, web3FormsDelivered] = await Promise.all([
+        fetch("/api/requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        }),
+        submitToWeb3Forms(data),
+      ]);
+      const result = await dbResponse.json().catch(() => ({}));
 
-      const result = await response.json();
-      if (response.ok) {
-        setSubmissionStatus("success");
-        formRef.current?.reset();
-        window.setTimeout(() => {
-          document.querySelector<HTMLElement>(".request-success-status")?.focus();
-        }, 100);
-      } else {
+      if (dbResponse.status === 400) {
         setSubmissionStatus("error");
         setErrorMessage(result.error || "An error occurred. Please try again.");
         if (result.fields) {
@@ -191,6 +210,18 @@ export default function Experience() {
           }
           setFieldErrors(formattedErrors);
         }
+        window.setTimeout(() => {
+          document.querySelector<HTMLElement>(".request-error-status")?.focus();
+        }, 100);
+      } else if (dbResponse.ok || web3FormsDelivered) {
+        setSubmissionStatus("success");
+        formRef.current?.reset();
+        window.setTimeout(() => {
+          document.querySelector<HTMLElement>(".request-success-status")?.focus();
+        }, 100);
+      } else {
+        setSubmissionStatus("error");
+        setErrorMessage(result.error || "We could not deliver your request. Please try again shortly.");
         window.setTimeout(() => {
           document.querySelector<HTMLElement>(".request-error-status")?.focus();
         }, 100);

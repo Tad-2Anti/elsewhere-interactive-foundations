@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import { POST } from "../app/api/requests/route.ts";
 
-const originalFetch = globalThis.fetch;
 let ipSequence = 0;
 
 const validPayload = {
@@ -28,63 +27,22 @@ function createRequest(payload = validPayload, ip = `127.0.1.${++ipSequence}`) {
 function resetDeliveryConfiguration() {
   delete process.env.MOCK_DB;
   delete process.env.DATABASE_URL;
-  delete process.env.WEB3FORMS_ACCESS_KEY;
-  globalThis.fetch = originalFetch;
 }
 
 afterEach(resetDeliveryConfiguration);
 
-test("API route succeeds with database storage only", async () => {
+test("API route succeeds with database storage", async () => {
   process.env.MOCK_DB = "true";
-  let providerCalled = false;
-  globalThis.fetch = async () => {
-    providerCalled = true;
-    return Response.json({ success: true });
-  };
-
-  const response = await POST(createRequest());
-  assert.equal(response.status, 200);
-  assert.equal(providerCalled, false);
-  assert.equal((await response.json()).success, true);
-});
-
-test("API route succeeds with Web3Forms delivery only", async () => {
-  process.env.WEB3FORMS_ACCESS_KEY = "test-access-key";
-  let submittedPayload;
-  globalThis.fetch = async (_url, options) => {
-    submittedPayload = JSON.parse(options.body);
-    return Response.json({ success: true });
-  };
-
-  const response = await POST(createRequest());
-  assert.equal(response.status, 200);
-  assert.equal(submittedPayload.access_key, "test-access-key");
-  assert.equal(submittedPayload.email, validPayload.email);
-});
-
-test("API route succeeds when one of two configured channels fails", async () => {
-  process.env.MOCK_DB = "true";
-  process.env.WEB3FORMS_ACCESS_KEY = "test-access-key";
-  globalThis.fetch = async () => Response.json({ success: false }, { status: 400 });
 
   const response = await POST(createRequest());
   assert.equal(response.status, 200);
   assert.equal((await response.json()).success, true);
 });
 
-test("API route returns 503 when no delivery channel is configured", async () => {
+test("API route returns 503 when the database is not configured", async () => {
   const response = await POST(createRequest());
   assert.equal(response.status, 503);
-  assert.match((await response.json()).error, /not configured/i);
-});
-
-test("API route rejects a provider HTTP success without success true", async () => {
-  process.env.WEB3FORMS_ACCESS_KEY = "test-access-key";
-  globalThis.fetch = async () => Response.json({ success: false });
-
-  const response = await POST(createRequest());
-  assert.equal(response.status, 502);
-  assert.match((await response.json()).error, /could not deliver/i);
+  assert.match((await response.json()).error, /unconfigured/i);
 });
 
 test("API route returns 400 for invalid request", async () => {
@@ -107,6 +65,12 @@ test("API route returns 400 for malformed JSON", async () => {
   const response = await POST(request);
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, "Invalid JSON request.");
+});
+
+test("API route silently accepts honeypot submissions without persisting", async () => {
+  const response = await POST(createRequest({ ...validPayload, website: "spam-bot-fill" }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).success, true);
 });
 
 test("API route rate limiting works after limit exceeded", async () => {
