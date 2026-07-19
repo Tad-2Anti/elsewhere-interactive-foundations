@@ -100,7 +100,6 @@ export default function Experience() {
   const { enabled, enable, disable } = useSiteSoundtrack();
   const formRef = useRef<HTMLFormElement>(null);
   const galleryRef = useRef<AtmosphericDepthGalleryHandle>(null);
-  const pendingIndexEntry = useRef(false);
   const mainRef = useViewportReveals<HTMLElement>();
   const activeWorld = useMemo(() => worlds[activeIndex], [activeIndex]);
 
@@ -124,33 +123,6 @@ export default function Experience() {
       motionQuery.removeEventListener("change", updateMotion);
     };
   }, []);
-
-  useEffect(() => {
-    if (!entered || !pendingIndexEntry.current) return;
-    pendingIndexEntry.current = false;
-    let focusTimer = 0;
-
-    const frame = window.requestAnimationFrame(() => {
-      const index = document.getElementById("explore");
-      if (!index) return;
-
-      index.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
-      window.history.replaceState(
-        window.history.state,
-        "",
-        `${window.location.pathname}${window.location.search}#explore`,
-      );
-      focusTimer = window.setTimeout(
-        () => index.focus({ preventScroll: true }),
-        reducedMotion ? 0 : 650,
-      );
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(focusTimer);
-    };
-  }, [entered, reducedMotion]);
 
   function enterWorld(id: string) {
     const index = worlds.findIndex((world) => world.id === id);
@@ -181,7 +153,6 @@ export default function Experience() {
       } catch { /* Audio is optional; entry must never fail. */ }
     }
     window.sessionStorage.setItem("elsewhere:entered", "true");
-    pendingIndexEntry.current = true;
     await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
     setEntered(true);
   }

@@ -16,7 +16,7 @@ The homepage is a bounded depth journey through six portals. It is not an orbit,
 8. `returning`: homepage restores the last active depth and fades controls in.
 9. `fallback`: semantic index replaces WebGL when rendering is unavailable.
 
-The two first-visit entry choices complete at the semantic six-world index rather than the spatial lobby. The gate first releases its modal state, then scrolls and moves focus to `#explore`; reduced-motion visitors receive an immediate jump. Explicit `?world=<id>` return navigation remains a separate restoration path and continues opening the saved portal.
+Both first-visit entry choices ("Enter with music" and "Enter quietly") release the gate's modal state and land the visitor on the spatial lobby (the depth gallery hero), not the semantic six-world index. The index at `#explore` is reached only through deliberate navigation — the "Browse the six worlds" link, the header's "Browse the index" link, or the skip link. Explicit `?world=<id>` return navigation remains a separate restoration path and continues opening the saved portal.
 
 If JavaScript is unavailable, the entry gate is removed and the semantic page remains visible and operable. Critical discovery and route content never depends on completing the WebGL or audio initialization.
 

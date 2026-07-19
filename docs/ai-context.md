@@ -24,7 +24,7 @@ Use this document as the short, authoritative brief when an AI coding agent cont
 - Every generated image is unbranded original art with no readable packaging, copied reference-site media, or copyrighted characters.
 - The off-centre motion pass uses a shared eased X anchor and a bounded under-damped Y spring.
 - Responsive hardening now includes dedicated mobile/tablet/desktop render tiers, progressive texture loading, offscreen pausing, mobile gallery handoff, safe-area layouts, route transitions, and reduced-motion equivalents.
-- First-visit entry choices now land on the semantic six-world index; explicit `?world=` returns still restore the spatial portal.
+- First-visit entry choices land on the spatial lobby (depth gallery hero); the semantic six-world index is reached only via deliberate navigation. Explicit `?world=` returns still restore the spatial portal.
 - Production SEO now includes canonical root and world metadata, permanent legacy redirects, canonical-only sitemap output, preview `noindex`, JSON-LD, original code-rendered social cards, a web manifest, and an original ELSEWHERE icon family.
 - Mobile gallery quality uses a `1.25` DPR cap, trilinear mipmaps, bounded anisotropy, late-texture recovery, and two-at-a-time progressive loading. Mobile touch sensitivity and smoothing are tuned independently; desktop motion remains unchanged.
 

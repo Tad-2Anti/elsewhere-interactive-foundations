@@ -21,11 +21,11 @@ test.describe("Homepage", () => {
       .toEqual(["WebSite", "Organization", "ItemList"]);
   });
 
-  test("quiet entry lands on the semantic six-world index", async ({ page }) => {
+  test("quiet entry lands on the hero gallery, not the index", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Enter quietly" }).click();
-    await expect(page).toHaveURL(/#explore$/);
-    await expect(page.locator("#explore")).toBeInViewport();
+    await expect(page).not.toHaveURL(/#explore$/);
+    await expect(page.locator("#lobby")).toBeInViewport();
   });
 
   test("contains gallery canvas and skip link", async ({ page }) => {
@@ -180,7 +180,7 @@ test("world pages do not reference _vinext image paths", async ({ page }) => {
 test("form shows validation error for invalid email", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Enter quietly" }).click();
-  await expect(page).toHaveURL(/#explore$/);
+  await expect(page.locator(".entry-gate")).toBeHidden();
   await page.locator("#request").scrollIntoViewIfNeeded();
 
   // Fill required fields except give a bad email
@@ -212,7 +212,7 @@ test("form submits a valid request and shows its success state", async ({ page }
 
   await page.goto("/");
   await page.getByRole("button", { name: "Enter quietly" }).click();
-  await expect(page).toHaveURL(/#explore$/);
+  await expect(page.locator(".entry-gate")).toBeHidden();
   await page.locator("#request").scrollIntoViewIfNeeded();
   await page.getByLabel(/Full name/i).fill("Test User");
   await page.getByLabel(/Email address/i).fill("test@example.com");
