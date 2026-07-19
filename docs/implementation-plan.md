@@ -100,6 +100,7 @@ Acceptance:
 5. Add wheel, touch, and keyboard handoff from the final portal to the semantic index.
 6. Implement dedicated phone, tablet, desktop, and short-landscape CSS compositions with safe-area spacing.
 7. Add persistent internal-route transitions and reduced-motion alternatives.
+8. Add mobile-only touch sensitivity and smoothing, a `1.25` DPR cap, mipmapped texture sampling, bounded retry, and late-response recovery without changing desktop motion.
 
 Acceptance:
 
@@ -108,6 +109,7 @@ Acceptance:
 - First portal is interactive without waiting for all six high-resolution textures.
 - The render loop stops when the gallery is not visible.
 - Phone and tablet visitors can reach below-fold content without being trapped by canvas input.
+- Moving portal art remains stable on high-density phones without requiring native device DPR or multisample antialiasing.
 
 ## Phase 6 — validation and release
 

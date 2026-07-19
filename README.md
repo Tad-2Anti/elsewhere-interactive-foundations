@@ -24,7 +24,7 @@ ELSEWHERE is an immersive import-discovery website organized as six atmospheric 
 |---|---|---|
 | `/` | Static | Homepage with Atmospheric Depth Gallery and sourcing request form |
 | `/world/[slug]` | SSG | World page for each of the six canonical worlds |
-| `/world/[alias]` | SSG | Legacy alias slugs (roam, gather, restore, ritual, wonder) that render the canonical world |
+| `/world/[alias]` | Redirect | Legacy alias slugs permanently redirect to their canonical world |
 | `/api/requests` | Dynamic | `POST` endpoint — validates, persists to Postgres, forwards to Web3Forms |
 | `/sitemap.xml` | Static | Dynamically generated sitemap |
 | `/robots.txt` | Static | Search engine crawl rules |

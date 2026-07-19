@@ -16,6 +16,10 @@ The homepage is a bounded depth journey through six portals. It is not an orbit,
 8. `returning`: homepage restores the last active depth and fades controls in.
 9. `fallback`: semantic index replaces WebGL when rendering is unavailable.
 
+The two first-visit entry choices complete at the semantic six-world index rather than the spatial lobby. The gate first releases its modal state, then scrolls and moves focus to `#explore`; reduced-motion visitors receive an immediate jump. Explicit `?world=<id>` return navigation remains a separate restoration path and continues opening the saved portal.
+
+If JavaScript is unavailable, the entry gate is removed and the semantic page remains visible and operable. Critical discovery and route content never depends on completing the WebGL or audio initialization.
+
 ## Input mapping
 
 | Input | Behavior |
@@ -86,6 +90,7 @@ Z positions use the upstream `planeGap` until the parity pass is complete.
 - Plane positioning, rotation, scale, and pointer tracking use separate smoothing constants so one noisy input cannot shake every channel.
 - Horizontal and vertical positions have separate response rates (`0.065` and `0.14` at 60 fps), allowing the bounce to read clearly while lateral travel remains restrained.
 - Mobile retains one quarter of the desktop authored X spread so the subject remains inside the narrow viewport.
+- Mobile touch input uses a dedicated `2.4` depth multiplier and `0.085` camera smoothing value. Desktop retains the approved `1.8` drag multiplier and `0.055` smoothing profile unchanged.
 
 ## Active portal rule
 

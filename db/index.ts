@@ -2,16 +2,18 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema.ts";
 
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+type Database = ReturnType<typeof drizzle<typeof schema>>;
+
+let db: Database | null = null;
 let pool: pg.Pool | null = null;
 
-export function getDb() {
-  if (process.env.NODE_ENV === "test" || process.env.MOCK_DB === "true") {
-    return {
-      insert: () => ({
-        values: async () => Promise.resolve(),
-      }),
-    } as any;
+export function getDb(): Database | null {
+  if (process.env.MOCK_DB === "true") {
+    const testDatabase = {
+      insert: () => ({ values: async () => undefined }),
+    };
+    // The test adapter intentionally implements only the insert chain used by the route.
+    return testDatabase as unknown as Database;
   }
 
   const connectionString = process.env.DATABASE_URL;

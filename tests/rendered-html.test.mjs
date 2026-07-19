@@ -40,7 +40,11 @@ test("depth-engine.ts contains all required runtime markers", async () => {
   assert.match(engine, /IntersectionObserver/, "missing IntersectionObserver");
   assert.match(engine, /handoffToIndex/, "missing handoffToIndex");
   assert.match(engine, /this\.worlds\[index\]\.imageMobile/, "missing imageMobile access");
-  assert.match(engine, /TEXTURE_LOAD_TIMEOUT_MS/, "missing TEXTURE_LOAD_TIMEOUT_MS");
+  assert.match(engine, /TEXTURE_READY_TIMEOUT_MS/, "missing texture readiness deadline");
+  assert.match(engine, /MOBILE_SCROLL_SMOOTHING/, "missing mobile scroll smoothing");
+  assert.match(engine, /MOBILE_DPR_LIMIT/, "missing mobile DPR limit");
+  assert.match(engine, /LinearMipmapLinearFilter/, "missing trilinear texture filtering");
+  assert.match(engine, /TEXTURE_BATCH_SIZE/, "missing bounded texture concurrency");
 });
 
 // ─── world-data integrity ────────────────────────────────────────────────────
@@ -138,4 +142,45 @@ test("world-data.ts contains no internal sourcing/verification copy", async () =
 test("world-experience.tsx does not reference _vinext image paths", async () => {
   const worldExperience = await src("app/world/[slug]/world-experience.tsx");
   assert.doesNotMatch(worldExperience, /\/_vinext\/image/i, "found _vinext image reference");
+});
+
+// ─── search, sharing, and secret safeguards ──────────────────────────────────
+
+test("root metadata contains canonical, social, manifest, and indexing controls", async () => {
+  const layout = await src("app/layout.tsx");
+
+  assert.match(layout, /metadataBase:\s*getSiteUrl\(\)/, "missing metadataBase");
+  assert.match(layout, /alternates:\s*\{ canonical:\s*["']\/["'] \}/, "missing root canonical");
+  assert.match(layout, /openGraph:/, "missing Open Graph metadata");
+  assert.match(layout, /twitter:/, "missing Twitter metadata");
+  assert.match(layout, /manifest:\s*["']\/manifest\.webmanifest["']/, "missing manifest metadata");
+  assert.doesNotMatch(layout, /codex-preview/, "development preview marker leaked into metadata");
+});
+
+test("world routes emit unique metadata and permanently redirect aliases", async () => {
+  const worldPage = await src("app/world/[slug]/page.tsx");
+
+  assert.match(worldPage, /generateMetadata/, "missing world metadata generator");
+  assert.match(worldPage, /alternates:\s*\{ canonical:\s*canonicalPath \}/, "missing world canonical");
+  assert.match(worldPage, /permanentRedirect/, "aliases must permanently redirect");
+  assert.match(worldPage, /CollectionPage/, "missing CollectionPage structured data");
+  assert.match(worldPage, /BreadcrumbList/, "missing breadcrumb structured data");
+});
+
+test("sitemap contains canonical worlds only and no fabricated modification dates", async () => {
+  const sitemap = await src("app/sitemap.ts");
+
+  assert.doesNotMatch(sitemap, /aliasUrls|worldAliases/, "legacy aliases leaked into sitemap");
+  assert.doesNotMatch(sitemap, /lastModified|new Date/, "sitemap contains fabricated freshness");
+  assert.match(sitemap, /worlds\.map/, "canonical worlds are missing from sitemap");
+});
+
+test("no Web3Forms access key is committed or used as a source fallback", async () => {
+  const route = await src("app/api/requests/route.ts");
+  const environmentExample = await src(".env.example");
+  const keyPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+  assert.doesNotMatch(route, keyPattern, "access key committed in request route");
+  assert.doesNotMatch(environmentExample, keyPattern, "access key committed in environment example");
+  assert.match(route, /WEB3FORMS_ACCESS_KEY\?\.trim/, "environment-only access key lookup missing");
 });

@@ -84,7 +84,7 @@ The existing `image` field remains temporarily for route compatibility, then ali
 |---|---:|---|---|---|
 | Desktop | max `1.75` | Full GLSL, noise `0.040` | Enabled | 1120×1400 WebP |
 | Tablet | max `1.35` | Full GLSL, noise `0.032` | Disabled | 1120×1400 WebP |
-| Mobile | `1.0` | Full GLSL, noise `0.022` | Disabled | 1120×1400 WebP progressively loaded |
+| Mobile | max `1.25` | Full GLSL, noise `0.022` | Disabled | 800×1000 WebP progressively loaded |
 
 Quality is selected conservatively from live canvas width and coarse-pointer state. Visual Viewport and element resize events are coalesced into one animation-frame update. Antialiasing is disabled when the renderer is created below the mobile breakpoint.
 
@@ -93,7 +93,9 @@ Quality is selected conservatively from live canvas width and coarse-pointer sta
 - Serve project-owned raster art from direct `/media/` URLs. Do not route these assets through the optional Vinext image optimizer; the production worker does not expose that route reliably.
 - Load the requested initial portal and background shader first.
 - Create the remaining portals with one-pixel palette placeholders.
-- Load remaining textures sequentially by distance from the initial portal after the first interactive frame.
+- Load remaining textures in distance-prioritized batches of two after the first interactive frame.
+- A four-second readiness deadline may reveal a palette placeholder, but late responses remain eligible to replace it; genuine failures receive one delayed retry.
+- Use trilinear mipmaps and bounded `2×` anisotropy for stable sampling during plane breath and camera movement.
 - Replace and dispose each placeholder in place.
 - Pause the request-animation-frame loop through Intersection Observer and Page Visibility state.
 - Dispose textures, placeholders, observers, listeners, frames, renderer, materials, and geometry during unmount.
@@ -116,6 +118,15 @@ Quality is selected conservatively from live canvas width and coarse-pointer sta
 - The world-page return link includes `?from=<world-id>` as a deterministic fallback.
 - On return, the engine initializes at the saved portal without replaying the entry gate during the same session.
 
+## Search and sharing contract
+
+- `app/site-config.ts` is the single source for the public site name, canonical origin, description, locale, and indexing environment.
+- Production pages emit unique canonical metadata. Preview deployments are `noindex`; the request API is excluded from crawler access.
+- Legacy world slugs permanently redirect to their canonical six-world routes and never appear in the sitemap.
+- The homepage emits `WebSite`, `Organization`, and six-world `ItemList` structured data. World routes emit `CollectionPage` and `BreadcrumbList` data; they intentionally do not claim purchasable `Product` or `Offer` inventory.
+- Root and world-specific Open Graph images are original, code-rendered brand assets. The manifest and icon family use the same ELSEWHERE monogram.
+- Sitemap modification dates are omitted until a truthful content timestamp exists; runtime request time must never be presented as content freshness.
+
 ## Accessibility and fallback
 
 - Canvas is decorative from the accessibility tree.
@@ -129,3 +140,4 @@ Quality is selected conservatively from live canvas width and coarse-pointer sta
 - Preserve the upstream license and add attribution in `ATTRIBUTIONS.md` and source headers.
 - Do not copy imagery, fonts, text, or sounds from the reference portfolio or Codrops demo.
 - All six collage images are original project assets.
+- `WEB3FORMS_ACCESS_KEY` is environment-only and has no repository fallback. Database storage and Web3Forms forwarding are independent delivery channels: a validated request succeeds when at least one configured channel accepts it, returns `503` when neither channel is configured, and returns `502` when all configured channels fail. Provider responses must report `success: true`; an HTTP success alone is insufficient.

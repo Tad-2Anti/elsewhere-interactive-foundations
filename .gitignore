@@ -52,3 +52,6 @@ next-env.d.ts
 .env.development.local
 .env.test.local
 .env.production.local
+
+# typescript build info
+tsconfig.tsbuildinfo

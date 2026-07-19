@@ -7,7 +7,13 @@ const SCROLL_TO_WORLD = 0.01;
 const CAMERA_OFFSET = 5;
 const MOBILE_BREAKPOINT = 700;
 const TABLET_BREAKPOINT = 1100;
-const TEXTURE_LOAD_TIMEOUT_MS = 2400;
+const TEXTURE_READY_TIMEOUT_MS = 4000;
+const TEXTURE_BATCH_SIZE = 2;
+const TEXTURE_RETRY_DELAY_MS = 900;
+const MOBILE_DPR_LIMIT = 1.25;
+const MOBILE_TOUCH_MULTIPLIER = 2.4;
+const DEFAULT_TOUCH_MULTIPLIER = 1.8;
+const MOBILE_SCROLL_SMOOTHING = 0.085;
 const FRAME_AT_60_FPS = 1000 / 60;
 
 const MOTION = {
@@ -228,6 +234,9 @@ export class DepthGalleryEngine {
   private readonly pointerCurrent = new THREE.Vector2();
   private readonly planes: GalleryPlane[] = [];
   private readonly palettes: Palette[];
+  private readonly textureLoads = new Map<number, Promise<THREE.Texture | null>>();
+  private readonly textureRetries = new Set<number>();
+  private readonly textureRetryTimers = new Set<number>();
   private trail: LightTrail | null = null;
   private animationFrame = 0;
   private running = false;
@@ -339,49 +348,82 @@ export class DepthGalleryEngine {
   }
 
   private async loadTexture(loader: THREE.TextureLoader, index: number) {
-    try {
-      const source = window.innerWidth <= MOBILE_BREAKPOINT
-        ? this.worlds[index].imageMobile
-        : this.worlds[index].image;
-      const texture = await new Promise<THREE.Texture | null>((resolve) => {
-        let settled = false;
-        const timeout = window.setTimeout(() => {
-          settled = true;
-          resolve(null);
-        }, TEXTURE_LOAD_TIMEOUT_MS);
-        loader.load(
-          source,
-          (loadedTexture: THREE.Texture) => {
-            if (settled) {
-              loadedTexture.dispose();
-              return;
-            }
-            settled = true;
-            window.clearTimeout(timeout);
-            resolve(loadedTexture);
-          },
-          undefined,
-          () => {
-            if (settled) return;
+    const existingLoad = this.textureLoads.get(index);
+    if (existingLoad) return existingLoad;
+
+    const source = window.innerWidth <= MOBILE_BREAKPOINT
+      ? this.worlds[index].imageMobile
+      : this.worlds[index].image;
+    const textureLoad = new Promise<THREE.Texture | null>((resolve) => {
+      let settled = false;
+      const timeout = window.setTimeout(() => {
+        settled = true;
+        resolve(null);
+      }, TEXTURE_READY_TIMEOUT_MS);
+
+      loader.load(source, (texture) => {
+        this.configureTexture(texture);
+        if (this.disposed) {
+          texture.dispose();
+          if (!settled) {
             settled = true;
             window.clearTimeout(timeout);
             resolve(null);
-          },
-        );
+          }
+        } else if (settled) this.applyTexture(index, texture);
+        else {
+          settled = true;
+          window.clearTimeout(timeout);
+          resolve(texture);
+        }
+      }, undefined, () => {
+        window.clearTimeout(timeout);
+        this.textureLoads.delete(index);
+        if (!settled) resolve(null);
+        this.scheduleTextureRetry(loader, index);
       });
-      if (!texture) return null;
-      if (this.disposed) {
-        texture.dispose();
-        return null;
-      }
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.generateMipmaps = false;
-      return texture;
-    } catch {
-      return null;
+    });
+
+    this.textureLoads.set(index, textureLoad);
+    return textureLoad;
+  }
+
+  private configureTexture(texture: THREE.Texture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = Math.min(2, this.renderer.capabilities.getMaxAnisotropy());
+    texture.needsUpdate = true;
+  }
+
+  private applyTexture(index: number, texture: THREE.Texture) {
+    const plane = this.planes[index];
+    if (this.disposed || !plane) {
+      texture.dispose();
+      return;
     }
+
+    const previousTexture = plane.mesh.material.map;
+    const image = texture.image as { width?: number; height?: number };
+    plane.aspect = (image.width ?? 1) / (image.height ?? 1);
+    plane.mesh.material.map = texture;
+    plane.mesh.material.needsUpdate = true;
+    previousTexture?.dispose();
+    this.applyPlaneScale(plane);
+  }
+
+  private scheduleTextureRetry(loader: THREE.TextureLoader, index: number) {
+    if (this.disposed || this.textureRetries.has(index)) return;
+    this.textureRetries.add(index);
+    const timer = window.setTimeout(() => {
+      this.textureRetryTimers.delete(timer);
+      if (this.disposed) return;
+      void this.loadTexture(loader, index).then((texture) => {
+        if (texture) this.applyTexture(index, texture);
+      });
+    }, TEXTURE_RETRY_DELAY_MS);
+    this.textureRetryTimers.add(timer);
   }
 
   private createPlaceholderTexture(index: number) {
@@ -404,17 +446,13 @@ export class DepthGalleryEngine {
       .filter((index) => index !== initialIndex || !hasInitialTexture)
       .sort((a, b) => Math.abs(a - initialIndex) - Math.abs(b - initialIndex));
 
-    for (const index of order) {
-      const texture = await this.loadTexture(loader, index);
-      if (!texture || this.disposed) continue;
-      const plane = this.planes[index];
-      const previousTexture = plane.mesh.material.map;
-      const image = texture.image as { width?: number; height?: number };
-      plane.aspect = (image.width ?? 1) / (image.height ?? 1);
-      plane.mesh.material.map = texture;
-      plane.mesh.material.needsUpdate = true;
-      previousTexture?.dispose();
-      this.applyPlaneScale(plane);
+    for (let start = 0; start < order.length; start += TEXTURE_BATCH_SIZE) {
+      const batch = order.slice(start, start + TEXTURE_BATCH_SIZE);
+      await Promise.all(batch.map(async (index) => {
+        const texture = await this.loadTexture(loader, index);
+        if (texture) this.applyTexture(index, texture);
+      }));
+      if (this.disposed) return;
     }
   }
 
@@ -460,6 +498,9 @@ export class DepthGalleryEngine {
     this.running = false;
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.resizeFrame);
+    this.textureRetryTimers.forEach(window.clearTimeout);
+    this.textureRetryTimers.clear();
+    this.textureLoads.clear();
     this.unbindEvents();
     this.trail?.dispose(this.scene);
     this.planes.forEach(({ mesh }) => {
@@ -483,7 +524,7 @@ export class DepthGalleryEngine {
     this.pointerParallaxScale = coarsePointer ? 0.25 : this.viewportTier === "mobile" ? 0.35 : this.viewportTier === "tablet" ? 0.7 : 1;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    const dprLimit = this.viewportTier === "mobile" ? 1 : this.viewportTier === "tablet" ? 1.35 : 1.75;
+    const dprLimit = this.viewportTier === "mobile" ? MOBILE_DPR_LIMIT : this.viewportTier === "tablet" ? 1.35 : 1.75;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, dprLimit));
     this.renderer.setSize(width, height, false);
     this.backgroundMaterial.uniforms.uNoiseStrength.value = this.viewportTier === "mobile" ? 0.022 : this.viewportTier === "tablet" ? 0.032 : 0.04;
@@ -598,7 +639,8 @@ export class DepthGalleryEngine {
       this.pointerDown.moved = Math.hypot(event.clientX - this.pointerDown.startX, event.clientY - this.pointerDown.startY);
       if (deltaY > 0 && this.scrollTarget >= this.maxScroll - 1) this.pointerDown.edgeTravel += deltaY;
       else if (deltaY < 0) this.pointerDown.edgeTravel = 0;
-      this.scrollTarget = clamp(this.scrollTarget + deltaY * 1.8, this.minScroll, this.maxScroll);
+      const touchMultiplier = this.isMobile ? MOBILE_TOUCH_MULTIPLIER : DEFAULT_TOUCH_MULTIPLIER;
+      this.scrollTarget = clamp(this.scrollTarget + deltaY * touchMultiplier, this.minScroll, this.maxScroll);
       this.gestureDriftY = clamp(deltaY / 80, -1, 1) * 0.035;
       this.verticalSpringVelocity -= clamp(deltaY / 60, -1, 1) * MOTION.verticalDragImpulse;
     }
@@ -693,7 +735,8 @@ export class DepthGalleryEngine {
 
   private updateScroll(delta: number) {
     if (!this.portal) {
-      const scrollAlpha = frameRateIndependentAlpha(this.options.reducedMotion ? 0.2 : MOTION.scrollSmoothing, delta);
+      const scrollSmoothing = this.isMobile ? MOBILE_SCROLL_SMOOTHING : MOTION.scrollSmoothing;
+      const scrollAlpha = frameRateIndependentAlpha(this.options.reducedMotion ? 0.2 : scrollSmoothing, delta);
       this.scrollCurrent += (this.scrollTarget - this.scrollCurrent) * scrollAlpha;
       const cameraDelta = (this.scrollCurrent - this.previousScroll) * SCROLL_TO_WORLD;
       const velocityAlpha = frameRateIndependentAlpha(MOTION.velocitySmoothing, delta);

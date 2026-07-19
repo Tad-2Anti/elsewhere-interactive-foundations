@@ -253,14 +253,15 @@ export const worlds: World[] = [
   },
 ];
 
+export const worldAliases: Record<string, string> = {
+  gather: "arcade",
+  restore: "scent",
+  ritual: "carry",
+  roam: "arena",
+  wear: "adorn",
+  wonder: "little",
+};
+
 export function getWorld(id: string) {
-  const aliases: Record<string, string> = {
-    gather: "arcade",
-    restore: "scent",
-    ritual: "carry",
-    roam: "arena",
-    wear: "adorn",
-    wonder: "little",
-  };
-  return worlds.find((world) => world.id === (aliases[id] ?? id));
+  return worlds.find((world) => world.id === (worldAliases[id] ?? id));
 }

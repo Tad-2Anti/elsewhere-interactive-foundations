@@ -1,70 +1,52 @@
 import { getDb } from "../../../db/index.ts";
 import { sourcingRequests } from "../../../db/schema.ts";
-import { requestSchema } from "../../request-schema.ts";
+import { requestSchema, type RequestPayload } from "../../request-schema.ts";
 
-// Simple in-memory token bucket rate limiter
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+type DeliveryResult = {
+  channel: "database" | "web3forms";
+  configured: boolean;
+  succeeded: boolean;
+};
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
-  const limit = 5; // 5 requests per 1 minute
+  const limit = 5;
   const windowMs = 60 * 1000;
-
   const record = rateLimitMap.get(ip);
+
   if (!record || now > record.resetTime) {
     rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
     return true;
   }
-
-  if (record.count >= limit) {
-    return false;
-  }
+  if (record.count >= limit) return false;
 
   record.count += 1;
   return true;
 }
 
-export async function POST(request: Request) {
+function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwardedFor || request.headers.get("x-real-ip") || "unknown";
+}
+
+function isHoneypotSubmission(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const website = (body as Record<string, unknown>).website;
+  return typeof website === "string" && website !== "";
+}
+
+function providerAccepted(body: unknown): boolean {
+  return Boolean(body && typeof body === "object" && (body as { success?: unknown }).success === true);
+}
+
+async function persistRequest(data: RequestPayload): Promise<DeliveryResult> {
   try {
-    // 1. Rate Limiting
-    const ip = request.headers.get("x-forwarded-for") || (request as any).ip || "unknown";
-    if (!checkRateLimit(ip)) {
-      return Response.json(
-        { error: "Too many requests. Please try again in a minute." },
-        { status: 429 }
-      );
-    }
+    const database = getDb();
+    if (!database) return { channel: "database", configured: false, succeeded: false };
 
-    // 2. Parse Body and Honey Pot Check
-    const body = await request.json();
-    if (body.website && body.website !== "") {
-      // Honeypot triggered: silently reject
-      return Response.json({ success: true, message: "Request received" });
-    }
-
-    // 3. Zod Validation
-    const parsed = requestSchema.safeParse(body);
-    if (!parsed.success) {
-      const fieldErrors = parsed.error.flatten().fieldErrors;
-      return Response.json(
-        { error: "Validation failed", fields: fieldErrors },
-        { status: 400 }
-      );
-    }
-
-    const data = parsed.data;
-
-    // 4. DB Persistence Check
-    const db = getDb();
-    if (!db) {
-      return Response.json(
-        { error: "Database service is currently unconfigured. Submissions are unavailable." },
-        { status: 503 }
-      );
-    }
-
-    // Save to Postgres Database
-    await db.insert(sourcingRequests).values({
+    await database.insert(sourcingRequests).values({
       name: data.name,
       email: data.email,
       phone: data.phone || null,
@@ -76,41 +58,82 @@ export async function POST(request: Request) {
       details: data.details || null,
       status: "pending",
     });
+    return { channel: "database", configured: true, succeeded: true };
+  } catch (error) {
+    console.error("Request database delivery failed", error);
+    return { channel: "database", configured: true, succeeded: false };
+  }
+}
 
-    // 5. Forward to Web3Forms
-    const web3formsAccessKey = process.env.WEB3FORMS_ACCESS_KEY || "46ef64cd-1715-4819-9dc0-761fed231a57";
-    const web3formsPayload = {
-      access_key: web3formsAccessKey,
-      subject: `New ELSEWHERE Sourcing Request: ${data.request}`,
-      from_name: "ELSEWHERE Sourcing Form",
-      ...data,
-    };
+async function forwardToWeb3Forms(data: RequestPayload): Promise<DeliveryResult> {
+  const accessKey = process.env.WEB3FORMS_ACCESS_KEY?.trim();
+  if (!accessKey) return { channel: "web3forms", configured: false, succeeded: false };
 
-    try {
-      const response = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(web3formsPayload),
-      });
+  try {
+    const response = await fetch("https://api.web3forms.com/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        access_key: accessKey,
+        subject: `New ELSEWHERE Sourcing Request: ${data.request}`,
+        from_name: "ELSEWHERE Sourcing Form",
+        ...data,
+      }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    const responseBody: unknown = await response.json().catch(() => null);
+    const succeeded = response.ok && providerAccepted(responseBody);
+    if (!succeeded) console.error("Web3Forms delivery rejected", { status: response.status });
+    return { channel: "web3forms", configured: true, succeeded };
+  } catch (error) {
+    console.error("Web3Forms delivery failed", error);
+    return { channel: "web3forms", configured: true, succeeded: false };
+  }
+}
 
-      if (!response.ok) {
-        console.error("Web3Forms forward failed", await response.text());
-      }
-    } catch (error) {
-      console.error("Failed to forward to Web3Forms", error);
-      // We do not fail the request if Web3Forms fails but DB succeeds, to align with
-      // "Email failure must not destroy a stored request."
-    }
-
-    return Response.json({ success: true, message: "Your request has been successfully submitted." });
-  } catch (error: any) {
-    console.error("POST /api/requests error", error);
+function deliveryResponse(results: DeliveryResult[]): Response {
+  if (!results.some((result) => result.configured)) {
     return Response.json(
-      { error: "Internal server error. Please try again later." },
-      { status: 500 }
+      { error: "Submission service is not configured. Please contact us directly." },
+      { status: 503 }
     );
   }
+  if (!results.some((result) => result.succeeded)) {
+    return Response.json(
+      { error: "We could not deliver your request. Please try again shortly." },
+      { status: 502 }
+    );
+  }
+  return Response.json({ success: true, message: "Your request has been successfully submitted." });
+}
+
+export async function POST(request: Request) {
+  if (!checkRateLimit(getClientIp(request))) {
+    return Response.json(
+      { error: "Too many requests. Please try again in a minute." },
+      { status: 429 }
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON request." }, { status: 400 });
+  }
+
+  if (isHoneypotSubmission(body)) {
+    return Response.json({ success: true, message: "Request received" });
+  }
+
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Validation failed", fields: parsed.error.flatten().fieldErrors },
+      { status: 400 }
+    );
+  }
+
+  const results = await Promise.all([persistRequest(parsed.data), forwardToWeb3Forms(parsed.data)]);
+  return deliveryResponse(results);
 }

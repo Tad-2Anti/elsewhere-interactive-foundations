@@ -86,6 +86,7 @@ function CursorAura() {
 
 export default function Experience() {
   const { navigate } = useRouteTransition();
+  const [hydrated, setHydrated] = useState(false);
   const [entered, setEntered] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [initialIndex, setInitialIndex] = useState<number | null>(null);
@@ -99,11 +100,13 @@ export default function Experience() {
   const { enabled, enable, disable } = useSiteSoundtrack();
   const formRef = useRef<HTMLFormElement>(null);
   const galleryRef = useRef<AtmosphericDepthGalleryHandle>(null);
+  const pendingIndexEntry = useRef(false);
   const mainRef = useViewportReveals<HTMLElement>();
   const activeWorld = useMemo(() => worlds[activeIndex], [activeIndex]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
+      setHydrated(true);
       const requestedWorld = new URLSearchParams(window.location.search).get("world")
         ?? window.sessionStorage.getItem("elsewhere:lastWorld");
       const requestedIndex = worlds.findIndex((world) => world.id === requestedWorld);
@@ -121,6 +124,33 @@ export default function Experience() {
       motionQuery.removeEventListener("change", updateMotion);
     };
   }, []);
+
+  useEffect(() => {
+    if (!entered || !pendingIndexEntry.current) return;
+    pendingIndexEntry.current = false;
+    let focusTimer = 0;
+
+    const frame = window.requestAnimationFrame(() => {
+      const index = document.getElementById("explore");
+      if (!index) return;
+
+      index.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${window.location.search}#explore`,
+      );
+      focusTimer = window.setTimeout(
+        () => index.focus({ preventScroll: true }),
+        reducedMotion ? 0 : 650,
+      );
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(focusTimer);
+    };
+  }, [entered, reducedMotion]);
 
   function enterWorld(id: string) {
     const index = worlds.findIndex((world) => world.id === id);
@@ -151,7 +181,9 @@ export default function Experience() {
       } catch { /* Audio is optional; entry must never fail. */ }
     }
     window.sessionStorage.setItem("elsewhere:entered", "true");
-    window.setTimeout(() => setEntered(true), 260);
+    pendingIndexEntry.current = true;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
+    setEntered(true);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -192,7 +224,7 @@ export default function Experience() {
           document.querySelector<HTMLElement>(".request-error-status")?.focus();
         }, 100);
       }
-    } catch (err) {
+    } catch {
       setSubmissionStatus("error");
       setErrorMessage("Network error. Please check your connection and try again.");
       window.setTimeout(() => {
@@ -205,9 +237,18 @@ export default function Experience() {
 
   return (
     <>
+      <noscript><style>{`.entry-gate{display:none!important}`}</style></noscript>
       {!entered ? <EntryGate onEnter={enter} /> : null}
       <CursorAura />
-      <main ref={mainRef} tabIndex={-1} className="spatial-site" aria-hidden={!entered} inert={!entered ? true : undefined} data-entering={enteringWorld} data-gallery-ready={galleryReady}>
+      <main
+        ref={mainRef}
+        tabIndex={-1}
+        className="spatial-site"
+        aria-hidden={hydrated && !entered ? true : undefined}
+        inert={hydrated && !entered ? true : undefined}
+        data-entering={enteringWorld}
+        data-gallery-ready={galleryReady}
+      >
         <a className="skip-link" href="#explore">Skip the spatial gallery</a>
         <header className="site-header">
           <a className="wordmark" href="#lobby">ELSEWHERE</a>
@@ -268,10 +309,10 @@ export default function Experience() {
           </nav>
         </section>
 
-        <section className="world-index" id="explore">
+        <section className="world-index" id="explore" tabIndex={-1} aria-labelledby="explore-heading">
           <header data-reveal>
             <p>The index</p>
-            <h2>Six categories,<br />one careful edit.</h2>
+            <h2 id="explore-heading">Six categories,<br />one careful edit.</h2>
           </header>
           <div className="index-list">
             {worlds.map((world, index) => (

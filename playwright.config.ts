@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const localPort = process.env.PLAYWRIGHT_PORT ?? "3000";
+const localBaseUrl = `http://127.0.0.1:${localPort}`;
+
 /**
  * Playwright E2E configuration for ELSEWHERE Interactive.
  *
@@ -11,10 +14,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? localBaseUrl,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -31,9 +34,10 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: "npm run dev",
-        url: "http://localhost:3000",
-        reuseExistingServer: true,
+        command: `npm run dev -- --hostname 127.0.0.1 --port ${localPort}`,
+        url: localBaseUrl,
+        // A port collision must fail visibly instead of testing an unrelated application.
+        reuseExistingServer: false,
         timeout: 120_000,
       },
 });

@@ -43,20 +43,21 @@ The CSS layout breakpoint and WebGL performance breakpoint are intentionally ind
 
 | Tier | Width | DPR cap | Plane scale | X spread | Trail | Noise |
 |---|---:|---:|---:|---:|---|---:|
-| Mobile | `<700px` | `1.0` | `0.66` | `25%` | Off | `0.022` |
+| Mobile | `<700px` | `1.25` | `0.66` | `25%` | Off | `0.022` |
 | Tablet | `700–1099px` | `1.35` | `0.82` | `62%` | Off | `0.032` |
 | Desktop | `≥1100px` | `1.75` | `1.0` | `100%` | On | `0.040` |
 
-Coarse pointers reduce canvas parallax to `25%`. Mobile creation also disables antialiasing. A `ResizeObserver`, the Visual Viewport API, and a frame-coalesced resize path keep camera aspect and renderer resolution synchronized during browser-chrome changes and orientation changes.
+Coarse pointers reduce canvas parallax to `25%`. Mobile creation keeps multisample antialiasing disabled, while the `1.25` DPR cap and trilinear mipmaps protect moving image edges without the framebuffer cost of full native DPR. Portal textures use bounded `2×` anisotropy. A `ResizeObserver`, the Visual Viewport API, and a frame-coalesced resize path keep camera aspect and renderer resolution synchronized during browser-chrome changes and orientation changes.
 
 ## Loading and runtime plan
 
 1. Load only the requested initial world before declaring the gallery ready.
 2. Represent other worlds with palette-colored one-pixel textures.
-3. Load the remaining worlds sequentially by distance from the active world.
-4. Replace placeholders in place and dispose them immediately.
-5. Pause the render loop when the canvas leaves the viewport or the page becomes hidden.
-6. Dispose resize, intersection, visibility, input, animation, geometry, material, and texture resources on unmount.
+3. Load the remaining worlds in distance-prioritized batches of two.
+4. Replace placeholders in place and dispose them immediately. A readiness deadline may release the loader, but a late cellular response still replaces its placeholder instead of being discarded.
+5. Retry a genuine texture failure once after a bounded delay.
+6. Pause the render loop when the canvas leaves the viewport or the page becomes hidden.
+7. Dispose resize, intersection, visibility, input, retry timer, animation, geometry, material, and texture resources on unmount.
 
 ## Navigation continuity
 
