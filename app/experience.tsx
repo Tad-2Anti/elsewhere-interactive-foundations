@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import AtmosphericDepthGallery, { type AtmosphericDepthGalleryHandle } from "./atmospheric-depth-gallery";
+import { requestSchema } from "./request-schema";
 import { TransitionLink, useRouteTransition } from "./route-transition";
 import { useSiteSoundtrack } from "./use-site-soundtrack";
 import { useViewportReveals } from "./use-viewport-reveals";
@@ -43,15 +44,30 @@ async function submitToWeb3Forms(data: Record<string, string>): Promise<boolean>
   const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY;
   if (!accessKey) return false;
 
+  // Same honeypot contract as the server route: a filled hidden field means a bot.
+  if (typeof data.website === "string" && data.website !== "") return false;
+
+  const parsed = requestSchema.safeParse(data);
+  if (!parsed.success) return false;
+  const fields = parsed.data;
+
   try {
     const response = await fetch("https://api.web3forms.com/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         access_key: accessKey,
-        subject: `New ELSEWHERE Sourcing Request: ${data.request ?? ""}`,
+        subject: `New ELSEWHERE Sourcing Request: ${fields.request}`,
         from_name: "ELSEWHERE Sourcing Form",
-        ...data,
+        name: fields.name,
+        email: fields.email,
+        phone: fields.phone || "",
+        location: fields.location,
+        contactPreference: fields.contactPreference,
+        category: fields.category,
+        request: fields.request,
+        reference: fields.reference || "",
+        details: fields.details || "",
       }),
     });
     const result: unknown = await response.json().catch(() => null);
@@ -402,7 +418,7 @@ export default function Experience() {
             </fieldset>
 
             <div className="request-privacy-consent">
-              <p>By submitting, you consent to ELSEWHERE checking and saving your request details. We will not share your personal data.</p>
+              <p>By submitting, you consent to ELSEWHERE checking and saving your request details, and to their delivery via Web3Forms, our email processor. We do not sell or share your data beyond fulfilling this request.</p>
             </div>
 
             <button type="submit" disabled={submitting}>
