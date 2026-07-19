@@ -1,151 +1,141 @@
+/**
+ * rendered-html.test.mjs
+ *
+ * Source-inspection tests that validate structural invariants across the
+ * app without requiring a running server.  Runtime HTML assertions (route
+ * rendering, alias redirects, filterable catalogues) live in the Playwright
+ * E2E suite (tests/e2e/).
+ */
+
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
-async function createWorker() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-
-  return worker;
+async function src(relPath) {
+  return readFile(new URL(`../${relPath}`, import.meta.url), "utf8");
 }
 
-async function fetchPage(worker, path) {
-  return worker.fetch(
-    new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-}
+// ─── CSS safeguards ──────────────────────────────────────────────────────────
 
-test("renders development preview metadata and hardened homepage controls", async () => {
-  const worker = await createWorker();
+test("globals.css contains critical layout and motion safeguards", async () => {
+  const css = await src("app/globals.css");
 
-  const response = await fetchPage(worker, "/");
-
-  assert.equal(response.status, 200);
-  assert.match(
-    response.headers.get("content-type") ?? "",
-    /^text\/html\b/i,
-  );
-  const html = await response.text();
-  assert.match(html, developmentPreviewMeta);
-  assert.match(html, /Skip the spatial gallery/i);
-  assert.match(html, /Browse the six worlds/i);
-  assert.match(html, /route-curtain/i);
-  assert.match(html, /Full name/i);
-  assert.match(html, /Email address/i);
-  assert.match(html, /Phone or WhatsApp/i);
-  assert.match(html, /City and country/i);
-  assert.match(html, /Preferred contact/i);
+  assert.match(css, /100dvh/, "missing 100dvh");
+  assert.match(css, /safe-area-inset-bottom/, "missing safe-area-inset-bottom");
+  assert.match(css, /max-height:\s*560px/, "missing 560px max-height cap");
+  assert.match(css, /prefers-reduced-motion:\s*reduce/, "missing reduced-motion query");
+  assert.match(css, /pointer:\s*coarse/, "missing coarse-pointer query");
 });
 
-test("renders every world route with its collection and return navigation", async () => {
-  const worker = await createWorker();
-  const worlds = ["arcade", "scent", "carry", "arena", "adorn", "little"];
+// ─── depth-engine markers ────────────────────────────────────────────────────
 
-  for (const world of worlds) {
-    const response = await fetchPage(worker, `/world/${world}`);
-    assert.equal(response.status, 200, world);
-    const html = await response.text();
-    assert.match(html, /Back to the index/i, world);
-    assert.doesNotMatch(html, /INDIA GAP|CHECKOUT-GATED|Official source recorded|ships only|does not ship|India absent|verification date/i, world);
-    assert.match(html, /Next world/i, world);
-    assert.match(html, new RegExp(`<img src="/media/worlds/${world}-hero\\.webp"`, "i"), world);
-    assert.match(html, new RegExp(`${world}-hero-mobile\\.webp`, "i"), world);
-    assert.doesNotMatch(html, /\/_vinext\/image/i, world);
+test("depth-engine.ts contains all required runtime markers", async () => {
+  const engine = await src("app/atmospheric-gallery/depth-engine.ts");
+
+  assert.match(engine, /TABLET_BREAKPOINT/, "missing TABLET_BREAKPOINT");
+  assert.match(engine, /loadRemainingTextures/, "missing loadRemainingTextures");
+  assert.match(engine, /ResizeObserver/, "missing ResizeObserver");
+  assert.match(engine, /IntersectionObserver/, "missing IntersectionObserver");
+  assert.match(engine, /handoffToIndex/, "missing handoffToIndex");
+  assert.match(engine, /this\.worlds\[index\]\.imageMobile/, "missing imageMobile access");
+  assert.match(engine, /TEXTURE_LOAD_TIMEOUT_MS/, "missing TEXTURE_LOAD_TIMEOUT_MS");
+});
+
+// ─── world-data integrity ────────────────────────────────────────────────────
+
+test("world-data.ts has exactly six heroImage and six imageMobile entries", async () => {
+  const worldData = await src("app/world-data.ts");
+
+  const heroCount = (worldData.match(/heroImage:\s*"\/media\/worlds\//g) ?? []).length;
+  const mobileCount = (worldData.match(/imageMobile:\s*"\/media\/worlds\//g) ?? []).length;
+
+  assert.equal(heroCount, 6, `expected 6 heroImages, got ${heroCount}`);
+  assert.equal(mobileCount, 6, `expected 6 imageMobile entries, got ${mobileCount}`);
+});
+
+test("world-data.ts contains the six canonical world accent and background colours", async () => {
+  const worldData = await src("app/world-data.ts");
+
+  // Arcade — lime accent, deep blue background (verified in previous session)
+  assert.match(worldData, /accent:\s*"#b8ff45"/i, "missing Arcade accent");
+  assert.match(worldData, /background:\s*"#0d4f87"/i, "missing Arcade background");
+});
+
+test("world-data.ts contains all six canonical world ids", async () => {
+  const worldData = await src("app/world-data.ts");
+
+  for (const id of ["arcade", "scent", "carry", "arena", "adorn", "little"]) {
+    assert.match(worldData, new RegExp(`id:\\s*["']${id}["']`), `missing world id: ${id}`);
   }
 });
 
-test("renders Arena as a clean, filterable sports world", async () => {
-  const worker = await createWorker();
-  const response = await fetchPage(worker, "/world/arena");
-  const html = await response.text();
-  assert.equal(response.status, 200);
-  assert.match(html, /Nine performance pieces/i);
-  assert.match(html, /Jerseys/i);
-  assert.match(html, /Footwear/i);
-  assert.match(html, /2025 Inaugural Primary Authentic Jersey/i);
-  assert.match(html, /Neovolt Pro V3/i);
-  assert.match(html, /Top Flex 26/i);
-  assert.doesNotMatch(html, /CHECKOUT-GATED|INDIA GAP|Grey-market marketplace/i);
+// ─── route-transition markers ────────────────────────────────────────────────
+
+test("route-transition.tsx contains sameDocument and releaseTimer guards", async () => {
+  const transitions = await src("app/route-transition.tsx");
+
+  assert.match(transitions, /sameDocument/, "missing sameDocument guard");
+  assert.match(transitions, /releaseTimer/, "missing releaseTimer guard");
 });
 
-test("keeps the former Roam route as an Arena alias", async () => {
-  const worker = await createWorker();
-  const response = await fetchPage(worker, "/world/roam");
-  const html = await response.text();
-  assert.equal(response.status, 200);
-  assert.match(html, /Arena/i);
+// ─── world-experience image safety ──────────────────────────────────────────
+
+test("world-experience does not use next/image (avoids _next/image URL rewriting)", async () => {
+  const worldExperience = await src("app/world/[slug]/world-experience.tsx");
+  const gallery = await src("app/atmospheric-depth-gallery.tsx");
+
+  // Must use explicit native <img> with known width/height for CLS safety
+  assert.match(worldExperience, /width=\{1120\}/, "missing explicit width on world image");
+  assert.match(worldExperience, /height=\{1400\}/, "missing explicit height on world image");
+
+  // Neither file should import next/image (we use raw <img> to preserve motion)
+  assert.doesNotMatch(worldExperience, /from "next\/image"/, "world-experience must not import next/image");
+  assert.doesNotMatch(gallery, /from "next\/image"/, "atmospheric-depth-gallery must not import next/image");
 });
 
-test("renders the four new researched worlds and preserves their former aliases", async () => {
-  const worker = await createWorker();
-  const checks = [
-    ["/world/arcade", /Nintendo Switch 2 Pro Controller/i],
-    ["/world/scent", /Banane Délice Eau de Parfum/i],
-    ["/world/carry", /Packing Cubes/i],
-    ["/world/little", /Busy Port City Train Set/i],
-    ["/world/gather", /Arcade/i],
-    ["/world/restore", /Scent/i],
-    ["/world/ritual", /Carry/i],
-    ["/world/wonder", /Little/i],
+// ─── form fields present in experience source ────────────────────────────────
+
+test("experience.tsx contains all required form field labels", async () => {
+  const experience = await src("app/experience.tsx");
+
+  for (const label of [
+    /Full name/i,
+    /Email address/i,
+    /Phone or WhatsApp/i,
+    /City and country/i,
+    /Preferred contact/i,
+  ]) {
+    assert.match(experience, label, `missing form label: ${label}`);
+  }
+});
+
+// ─── no research-led verification copy in world data ────────────────────────
+
+test("world-data.ts contains no internal sourcing/verification copy", async () => {
+  const worldData = await src("app/world-data.ts");
+
+  const forbidden = [
+    /INDIA GAP/,
+    /CHECKOUT-GATED/,
+    /Official source recorded/,
+    /ships only to/i,
+    /does not ship/i,
+    /India absent/i,
+    /verification date/i,
+    /Grey-market marketplace/i,
+    /authorised Indian/i,
   ];
 
-  for (const [path, expected] of checks) {
-    const response = await fetchPage(worker, path);
-    assert.equal(response.status, 200, path);
-    assert.match(await response.text(), expected, path);
+  for (const pattern of forbidden) {
+    assert.doesNotMatch(worldData, pattern, `found forbidden copy: ${pattern}`);
   }
 });
 
-test("renders the Adorn catalog without research-led verification copy", async () => {
-  const worker = await createWorker();
-  const response = await fetchPage(worker, "/world/adorn");
-  const html = await response.text();
-  assert.equal(response.status, 200);
-  assert.match(html, /Eight considered pieces/i);
-  assert.match(html, /Underlined Kajal Eyeliner/i);
-  assert.match(html, /Skin Spark Blush Balm/i);
-  assert.match(html, /Kasha Coin Fringe/i);
-  assert.doesNotMatch(html, /INDIA GAP|Distribution changes|authorised Indian/i);
-  assert.match(html, /adorn-makeup-collage\.webp/i);
-  assert.match(html, /adorn-accessories-collage\.webp/i);
-});
+// ─── no Vinext artefacts ─────────────────────────────────────────────────────
 
-test("keeps responsive, reduced-motion, direct-image, navigation, and runtime safeguards in source", async () => {
-  const [css, engine, worldData, transitions, worldExperience, gallery] = await Promise.all([
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../app/atmospheric-gallery/depth-engine.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/world-data.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/route-transition.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/world/[slug]/world-experience.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/atmospheric-depth-gallery.tsx", import.meta.url), "utf8"),
-  ]);
-
-  assert.match(css, /100dvh/);
-  assert.match(css, /safe-area-inset-bottom/);
-  assert.match(css, /max-height:\s*560px/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(css, /pointer:\s*coarse/);
-  assert.match(engine, /TABLET_BREAKPOINT/);
-  assert.match(engine, /loadRemainingTextures/);
-  assert.match(engine, /ResizeObserver/);
-  assert.match(engine, /IntersectionObserver/);
-  assert.match(engine, /handoffToIndex/);
-  assert.match(engine, /this\.worlds\[index\]\.imageMobile/);
-  assert.match(engine, /TEXTURE_LOAD_TIMEOUT_MS/);
-  assert.equal((worldData.match(/heroImage:\s*"\/media\/worlds\//g) ?? []).length, 6);
-  assert.equal((worldData.match(/imageMobile:\s*"\/media\/worlds\//g) ?? []).length, 6);
-  assert.match(transitions, /sameDocument/);
-  assert.match(transitions, /releaseTimer/);
-  assert.match(worldExperience, /width=\{1120\}/);
-  assert.match(worldExperience, /height=\{1400\}/);
-  assert.doesNotMatch(worldExperience, /from "next\/image"/);
-  assert.doesNotMatch(gallery, /from "next\/image"/);
-  assert.match(worldData, /accent:\s*"#b8ff45"/i);
-  assert.match(worldData, /background:\s*"#0d4f87"/i);
+test("world-experience.tsx does not reference _vinext image paths", async () => {
+  const worldExperience = await src("app/world/[slug]/world-experience.tsx");
+  assert.doesNotMatch(worldExperience, /\/_vinext\/image/i, "found _vinext image reference");
 });

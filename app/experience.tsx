@@ -92,8 +92,12 @@ export default function Experience() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [galleryReady, setGalleryReady] = useState(false);
   const [enteringWorld, setEnteringWorld] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submissionStatus, setSubmissionStatus] = useState<"idle" | "success" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const { enabled, enable, disable } = useSiteSoundtrack();
+  const formRef = useRef<HTMLFormElement>(null);
   const galleryRef = useRef<AtmosphericDepthGalleryHandle>(null);
   const mainRef = useViewportReveals<HTMLElement>();
   const activeWorld = useMemo(() => worlds[activeIndex], [activeIndex]);
@@ -150,9 +154,53 @@ export default function Experience() {
     window.setTimeout(() => setEntered(true), 260);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true);
+    setSubmissionStatus("idle");
+    setErrorMessage(null);
+    setFieldErrors({});
+
+    const formData = new FormData(event.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      const response = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        setSubmissionStatus("success");
+        formRef.current?.reset();
+        window.setTimeout(() => {
+          document.querySelector<HTMLElement>(".request-success-status")?.focus();
+        }, 100);
+      } else {
+        setSubmissionStatus("error");
+        setErrorMessage(result.error || "An error occurred. Please try again.");
+        if (result.fields) {
+          const formattedErrors: Record<string, string> = {};
+          for (const key of Object.keys(result.fields)) {
+            formattedErrors[key] = result.fields[key]?.[0] || "";
+          }
+          setFieldErrors(formattedErrors);
+        }
+        window.setTimeout(() => {
+          document.querySelector<HTMLElement>(".request-error-status")?.focus();
+        }, 100);
+      }
+    } catch (err) {
+      setSubmissionStatus("error");
+      setErrorMessage("Network error. Please check your connection and try again.");
+      window.setTimeout(() => {
+        document.querySelector<HTMLElement>(".request-error-status")?.focus();
+      }, 100);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -241,27 +289,95 @@ export default function Experience() {
           <div className="request-copy" data-reveal>
             <p>Looking for something specific?</p>
             <h2>Tell us what you are trying to find.</h2>
-            <span>Share a link, a reference image, or the details that matter. This prototype stores nothing and does not send requests.</span>
+            <span>Share a link, reference, or specifications. Submissions are processed and stored securely.</span>
           </div>
-          <form onSubmit={submit} data-reveal style={{ "--reveal-delay": "90ms" } as React.CSSProperties}>
-            <fieldset className="request-form-group">
+          <form ref={formRef} onSubmit={submit} data-reveal style={{ "--reveal-delay": "90ms" } as React.CSSProperties}>
+            {/* Honeypot field */}
+            <input type="text" name="website" style={{ display: "none" }} tabIndex={-1} autoComplete="off" />
+
+            <fieldset className="request-form-group" disabled={submitting}>
               <legend>Your details</legend>
               <div className="request-form-grid">
-                <label><span>Full name</span><input name="name" required autoComplete="name" placeholder="Your name" /></label>
-                <label><span>Email address</span><input name="email" type="email" required inputMode="email" autoComplete="email" placeholder="you@example.com" /></label>
-                <label><span>Phone or WhatsApp</span><input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210" /></label>
-                <label><span>City and country</span><input name="location" required autoComplete="address-level2" placeholder="Mumbai, India" /></label>
+                <label>
+                  <span>Full name</span>
+                  <input name="name" required autoComplete="name" placeholder="Your name" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? "error-name" : undefined} />
+                  {fieldErrors.name && <span id="error-name" className="field-error-message" role="alert">{fieldErrors.name}</span>}
+                </label>
+                <label>
+                  <span>Email address</span>
+                  <input name="email" type="email" required inputMode="email" autoComplete="email" placeholder="you@example.com" aria-invalid={!!fieldErrors.email} aria-describedby={fieldErrors.email ? "error-email" : undefined} />
+                  {fieldErrors.email && <span id="error-email" className="field-error-message" role="alert">{fieldErrors.email}</span>}
+                </label>
+                <label>
+                  <span>Phone or WhatsApp</span>
+                  <input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210" aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone ? "error-phone" : undefined} />
+                  {fieldErrors.phone && <span id="error-phone" className="field-error-message" role="alert">{fieldErrors.phone}</span>}
+                </label>
+                <label>
+                  <span>City and country</span>
+                  <input name="location" required autoComplete="address-level2" placeholder="Mumbai, India" aria-invalid={!!fieldErrors.location} aria-describedby={fieldErrors.location ? "error-location" : undefined} />
+                  {fieldErrors.location && <span id="error-location" className="field-error-message" role="alert">{fieldErrors.location}</span>}
+                </label>
               </div>
-              <label><span>Preferred contact</span><select name="contactPreference" defaultValue="email"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="phone">Phone call</option></select></label>
+              <label>
+                <span>Preferred contact</span>
+                <select name="contactPreference" defaultValue="email" aria-invalid={!!fieldErrors.contactPreference} aria-describedby={fieldErrors.contactPreference ? "error-contactPreference" : undefined}>
+                  <option value="email">Email</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="phone">Phone call</option>
+                </select>
+                {fieldErrors.contactPreference && <span id="error-contactPreference" className="field-error-message" role="alert">{fieldErrors.contactPreference}</span>}
+              </label>
             </fieldset>
-            <fieldset className="request-form-group">
+
+            <fieldset className="request-form-group" disabled={submitting}>
               <legend>Your request</legend>
-              <label><span>What are you looking for?</span><input name="request" required autoComplete="off" placeholder="A lamp I saw in Copenhagen" /></label>
-              <label><span>Reference link</span><input name="reference" type="url" inputMode="url" autoComplete="url" placeholder="https://" /></label>
-              <label><span>Anything we should know?</span><textarea name="details" rows={3} placeholder="Material, size, budget or where you found it" /></label>
+              <label>
+                <span>World / Category</span>
+                <select name="category" defaultValue={activeWorld.id} aria-invalid={!!fieldErrors.category} aria-describedby={fieldErrors.category ? "error-category" : undefined}>
+                  {worlds.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+                {fieldErrors.category && <span id="error-category" className="field-error-message" role="alert">{fieldErrors.category}</span>}
+              </label>
+              <label>
+                <span>What are you looking for?</span>
+                <input name="request" required autoComplete="off" placeholder="A lamp I saw in Copenhagen" aria-invalid={!!fieldErrors.request} aria-describedby={fieldErrors.request ? "error-request" : undefined} />
+                {fieldErrors.request && <span id="error-request" className="field-error-message" role="alert">{fieldErrors.request}</span>}
+              </label>
+              <label>
+                <span>Reference link</span>
+                <input name="reference" type="url" inputMode="url" autoComplete="url" placeholder="https://" aria-invalid={!!fieldErrors.reference} aria-describedby={fieldErrors.reference ? "error-reference" : undefined} />
+                {fieldErrors.reference && <span id="error-reference" className="field-error-message" role="alert">{fieldErrors.reference}</span>}
+              </label>
+              <label>
+                <span>Anything we should know?</span>
+                <textarea name="details" rows={3} placeholder="Material, size, budget or where you found it" aria-invalid={!!fieldErrors.details} aria-describedby={fieldErrors.details ? "error-details" : undefined} />
+                {fieldErrors.details && <span id="error-details" className="field-error-message" role="alert">{fieldErrors.details}</span>}
+              </label>
             </fieldset>
-            <button type="submit">{submitted ? "Request noted" : "Submit a request"}<span>↗</span></button>
-            {submitted ? <p role="status">Prototype complete — no information was transmitted.</p> : null}
+
+            <div className="request-privacy-consent">
+              <p>By submitting, you consent to ELSEWHERE checking and saving your request details. We will not share your personal data.</p>
+            </div>
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Submitting..." : submissionStatus === "success" ? "Submitted" : "Submit a request"}
+              <span>↗</span>
+            </button>
+
+            {submissionStatus === "success" && (
+              <p className="request-success-status" role="status" tabIndex={-1} style={{ color: "#b8ff45", marginTop: "1rem" }}>
+                Your request has been successfully submitted. We will be in touch!
+              </p>
+            )}
+
+            {submissionStatus === "error" && (
+              <p className="request-error-status" role="alert" tabIndex={-1} style={{ color: "#ff9a71", marginTop: "1rem" }}>
+                {errorMessage || "Submission failed. Please check the fields and try again."}
+              </p>
+            )}
           </form>
         </section>
 

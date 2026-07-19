@@ -174,7 +174,7 @@ class LightTrail {
     const radialOffset = new THREE.Vector3();
     const vertexPosition = new THREE.Vector3();
 
-    pathPoints.forEach((pathPoint, index) => {
+    pathPoints.forEach((pathPoint: THREE.Vector3, index: number) => {
       const t = index / Math.max(pathPoints.length - 1, 1);
       const radius = 0.012 + (0.003 - 0.012) * Math.pow(t, 1.5);
       curve.getTangent(t, tangent).normalize();
@@ -351,7 +351,7 @@ export class DepthGalleryEngine {
         }, TEXTURE_LOAD_TIMEOUT_MS);
         loader.load(
           source,
-          (loadedTexture) => {
+          (loadedTexture: THREE.Texture) => {
             if (settled) {
               loadedTexture.dispose();
               return;

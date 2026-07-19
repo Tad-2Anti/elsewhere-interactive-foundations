@@ -3,7 +3,9 @@ import WorldExperience from "./world-experience";
 import { getWorld, worlds } from "../../world-data";
 
 export function generateStaticParams() {
-  return worlds.map((world) => ({ slug: world.id }));
+  const aliases = ["gather", "restore", "ritual", "roam", "wear", "wonder"];
+  const ids = worlds.map((world) => world.id);
+  return [...ids, ...aliases].map((slug) => ({ slug }));
 }
 
 export default async function WorldPage({ params }: { params: Promise<{ slug: string }> }) {
